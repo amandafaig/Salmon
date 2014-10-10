@@ -23,16 +23,16 @@
 %                       today's profits are equal to the price per pound of
 %                       fish, minus the cost of fishing each pound, minus
 %                       the amount of money invested into the hatchery.
-% 2. stock growth       s_(t+1) = s_(t) + r*S_(t)*(1 - S_(t)/K) - harv*S + f(inv)
-%                       where s is stock, r is intrinsic growth, K is
-%                       carrying capacity, and f(inv) is the hatchery
-%                       transformation formula
+% 2. stock growth       s_(t+1) = 
 % 3. hatchery transformation
 %                       f(inv) = 5*log(inv)
 %                       This was an arbitrary decision, and should be
 %                       changed once we have a good estimate.
+% 4. harvest            harvest = S_t - escapement*S_t
+%                       This should also get updated
 % ------------------------------------------------------------------------
-% September 30, 2014
+% Created: September 30, 2014
+% Last Updated: October 6, 2014
 % Amanda Faig
 % ------------------------------------------------------------------------
 
@@ -40,42 +40,53 @@ clear all
 
 % 1A. Set up the economic parameters
 % ----------------------------------
-p       = 1;            % price of harvest
+p       = 5;            % price of harvest
 c       = 0.075;        % cost of harvest
-delta   = 1/1.1;        % discount factor
-harv    = 0.5;          % harvest control rule: for now just what portion 
+delta   = 1/1.03;       % discount factor
+esc     = 0.4;          % excapement rule: for now just what portion 
                         % of the stock will be harvested
                         
 
 % 1B. Set up the biological parameters
 % ------------------------------------
-r       = 0.3;          % intrinsic growth rate
-K       = 100;          % carrying capacity
+R       = 11;          
+alpha   = .1;          
+K       = round((R-1)/alpha);          % carrying capacity
+
+% 1C. Set up stochasticity
+% ------------------------
+z       = [0.3; 0; -0.3];       % the shocks to salmon growth
+pz      = [0.3, 0.4, 0.3];      % the probability that each shock will 
+                                % occur
+                                
+        % check that the probability vector makes sense
+        % ---------------------------------------------
+        if sum(pz) ~= 1                 
+
+            disp('ERROR: improper probability matrix')
+            break
+        end
 
 % 1C. Set up all other parameters
 % -------------------------------
-Sgrid   = K;                    % determines how fine the grid is
-Svec    = linspace(0,K,Sgrid);  % vector of the state space
+Svec    = linspace(0,K,K);      % vector of the state space
+check   = 2;
 
 
 % 2. Initial condition
 % --------------------
-V       = zeros(1, Sgrid);      % sets initial guess of value function for 
+Vold    = 2700*ones(1, K);  % sets initial guess of value function for 
                                 % each stock leven in each period
-                                
-% 3. Choose simulation length
-% ---------------------------                                
-T       = 40;                  
+                                               
 
-
-% 4. Value Function Iteration
+% 3. Value Function Iteration
 % ---------------------------
 
-for t = T:-1:1              % loop backwards over time
+while check > .01           % keep going until max dev less than .01%
     for i = 1:length(Svec)  % loop over stocks
         S               = Svec(i);
         [Invtmp, Vtmp]  = ...
-            fminbnd(@(inv)negpayoff(inv,harv,p,c,delta,r,K,Svec,S,V),0,1000);
+            fminbnd(@(inv)negpayoff(inv,esc,p,c,delta,R,alpha,Svec,S,Vold,z,pz),0,1000);
                             % temporary investment decision and value 
                             % function is equal to the levels that maximize 
                             % the payoff function (minimize -1*payoff)
@@ -86,19 +97,41 @@ for t = T:-1:1              % loop backwards over time
                             % point for the next iteration
     end
     
-        %plot the value function and policy functions backwards through time
-    subplot(1,2,1)
-    plot(Svec,V)
-    xlabel('stock')
-    ylabel('Value Function value')
-    hold on
+    dev         = abs((V - Vold)./V)*100;   % calculate the maximum 
+                                            % deviation (in percent) 
+                                            % between iterations
+    check       = max(dev);                 
+    Vold        = V;
     
-    subplot(1,2,2)
-    plot(Svec,invstar)
-    xlabel('stock')
-    ylabel('optimal investment')
-    hold on
-    pause(.1)
+    % Plot the value function and policy function of each iteration
+    % -------------------------------------------------------------
+    
+    colorvec    = [0.1 ,0.5 ,1 ; 1, 0, 0];  % creates colormap for plot
+    
+    if check > 0.01                         % so long as the loop will do 
+                                            % another iteration, plot using
+                                            % the first color of the
+                                            % colormap
+        color = colorvec(1,:);
+        
+    else
+        color = colorvec(2,:);              % otherwise, plot with second 
+                                            % color
+    end
+         
+        subplot(1,2,1)
+        plot(Svec,Vold,'Color',color)
+        xlabel('stock')
+        ylabel('Value Function value')
+        hold on
+
+        subplot(1,2,2)
+        plot(Svec,invstar,'Color',color)
+        xlabel('stock')
+        ylabel('optimal investment')
+        hold on
+        pause(.1)
+        
 end
 
       
