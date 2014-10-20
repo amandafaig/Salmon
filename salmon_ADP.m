@@ -10,26 +10,12 @@
 % ------------------------------------------------------------------------
 % There software includes the following files:
 % ------------------------------------------------------------------------
-% 1. "salmon_ADP.m"         Computes the ADP solution in the form of investment
+% 1. "salmon_ADP.m"     Computes the ADP solution in the form of investment
 %                       policy function.
 % 2. "negpayoff.m"      Calculates the value function at each given state.
 %                       This file also includes the hatchery transformation
 %                       (from investment to fish) specification.
 %
-% ------------------------------------------------------------------------
-% The formulas I use are:
-% ------------------------------------------------------------------------
-% 1. current profit     pi = p*harv*S - c*(harv*S)^2 - inv
-%                       today's profits are equal to the price per pound of
-%                       fish, minus the cost of fishing each pound, minus
-%                       the amount of money invested into the hatchery.
-% 2. stock growth       s_(t+1) = 
-% 3. hatchery transformation
-%                       f(inv) = 5*log(inv)
-%                       This was an arbitrary decision, and should be
-%                       changed once we have a good estimate.
-% 4. harvest            harvest = S_t - escapement*S_t
-%                       This should also get updated
 % ------------------------------------------------------------------------
 % Created: October 15, 2014
 % Last updated: October 20, 2014
@@ -56,14 +42,15 @@ esc     = 0.4;          % excapement rule: for now just what portion
 % ------------------------------------
 R       = 201;          
 alpha   = 2;          
-K       = round((R-1)/alpha);          % carrying capacity
+K       = round((R-1)/alpha);         
+                        % carrying capacity
 
 % 1D. Set up stochasticity
 % ------------------------
-mean        = 0;                    % mean for distribution of shocks
-sd          = .1;                    % SD for distribution of shocks 
+mean        = 0;        % mean for distribution of shocks
+sd          = .1;       % SD for distribution of shocks 
 z           = linspace(mean - 3*sd,mean + 3*sd, 100); 
-                                % 100 points from 99.7% of the distribution
+                        % 100 points from 99.7% of the distribution
 cz          = normcdf(z,mean,sd);
 cz2         = [0, cz];
 cz2(end)    = [];
@@ -73,7 +60,7 @@ pz(end)     = 1 - sum(pz);
 
 % 1E. Set up all other parameters
 % -------------------------------
-Svec    = linspace(0,K,K+1);      % vector of the state space
+Svec    = linspace(0,K,K+1);        % vector of the state space
 check   = 2;
 
 % 2. Initial conditions
@@ -83,11 +70,18 @@ Vold    = linspace(8000,8300,K+1);  % sets initial guess of value function for
 V               = Vold;                
 j               = round(K/2);
 S               = Svec(j);
-count           = 0;
 invstar         = 500*ones(K+1,1);
+count           = 0;
 
-% 3. Value Function Iteration
-% ---------------------------
+% 3. Approximate Dynamic Programing
+% ---------------------------------
+% What this essentially does is picks a random stock level, S, and figures
+% out the level of investment that will maximize V(S), Vold to calculate E(V(S'))
+% Then, the new value of V(S) replaces Vold(S), thereby slowly updating the
+% value function until the updates no longer change Vold from V.
+% Rather than check if the changes are insubstantion one by one, we do this
+% T times before checking.  This ensures that a large number, if not all,
+% of the values of V(S) have been updated.
 
 while check > .01           % keep going until max dev less than .01%
    for i = 1:T
