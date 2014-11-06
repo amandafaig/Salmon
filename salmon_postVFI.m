@@ -1,29 +1,32 @@
-% Simple fishery harvest problem, post-decision state VFI.
+% STEP 2: Simple fishery harvest problem, post-decision state VFI.
 %
+% Run this code after running "salmon_preVFI" (Step 1).  The graphs will
+% superimpose, allowing you to see how the two solve differently.  If you
+% prefer they don't superimpose, save and close the results from Step 1
+% before running Step 2.
 %
 % ------------------------------------------------------------------------
-% There software includes the following files:
+% There software calls on the following files:
 % ------------------------------------------------------------------------
-% 1. "salmon_VFI_post.m"    Computes the VFI solution in the form of 
+% 1. "salmon_postVFI.m"    Computes the VFI solution in the form of 
 %                           investment policy function.
 % 2. "negpayoff.m"          Calculates the value function at each given state.
 %                           This file also includes the hatchery transformation
 %                           (from investment to fish) specification.
 % ------------------------------------------------------------------------
 % Created: Nov 4, 2014
+% Last updated: Nov 6, 2014
 % Amanda Faig
 % ------------------------------------------------------------------------
 
 clear all
-%dbstop in negpayoffpost
+%dbstop in negpayoff
 
 % 1A. Set up the economic parameters
 % ----------------------------------
-p       = 10;            % price per kg
+p       = 10;           % price per kg
 c       = 0.075;        % cost of harvest
 delta   = 1/1.03;       % discount factor
-esc     = 0.4;          % excapement rule: for now just what portion 
-                        % of the stock will be harvested
                         
 
 % 1B. Set up the biological parameters
@@ -36,7 +39,7 @@ K       = round((R-1)/alpha);          % carrying capacity
 % ------------------------
 mean        = 0;                    % mean for distribution of shocks
 sd          = .1;                    % SD for distribution of shocks 
-z           = linspace(mean - 3*sd,mean + 3*sd, 100); 
+z           = linspace(mean - 3*sd,mean + 3*sd, 10); 
                                 % 100 points from 99.7% of the distribution
 cz          = normcdf(z,mean,sd);
 cz2         = [0, cz];
@@ -45,9 +48,8 @@ pz          = (cz - cz2);
 pz(end)     = 0;
 pz(end)     = 1 - sum(pz);
 
-
-        % check that the probability vector makes sense
-        % ---------------------------------------------
+        % check that the probabilities add up to 1
+        % ----------------------------------------
         if sum(pz) ~= 1               
 
             disp('ERROR: improper probability matrix')
@@ -58,38 +60,46 @@ pz(end)     = 1 - sum(pz);
 % -------------------------------
 Svec    = linspace(0,K,K+1);      % vector of the state space
 check   = 2;
-
+conv    = 0.01;         % convergence check: how close in percent the 
+                        % estimates from two successive iterations must be 
+                        % in order for the loop to stop
 
 % 2. Initial condition
 % --------------------
-Vold    = linspace(8000,8300,K+1);  % sets initial guess of value function for 
-                                    % each stock leven in each period
-Vtemp   = zeros(length(z),1);
+Vold    = linspace(10^4,10^4+K,K+1);  % sets initial guess of value 
+                                        % function for each stock leven in 
+                                        % each period
+Vold(1) = 0;                            % the value of no stock is 0
+
+% Placeholders
+% ------------
+Viter   = zeros(length(z),1);
 V       = zeros(1,length(Svec));
-invtemp = Vtemp;
-invstar = V;
+ESCiter = Viter;
+ESCstar = V;
+
+
 % 3. Value Function Iteration
 % ---------------------------
 
-while check > .01           % keep going until max dev less than .01%
+while check > conv          % keep going until max dev less than .01%
     for i = 1:length(Svec)  % loop over stocks
         for j = 1:length(z)
             e               = z(j);
-            p               = pz(j);
-            S               = i;
-            [Invtmp, Vtmp]  = ...
-            fminbnd(@(inv)negpayoff(inv,esc,p,c,delta,R,alpha,Svec,S,Vold,e,p),0,1000);
+            S               = Svec(i);
+            [ESCtmp, Vtmp]  = ...
+            fminbnd(@(esc)negpayoff(esc,p,c,delta,R,alpha,Svec,S,Vold,e,1),0,1);
                             % temporary investment decision and value 
                             % function is equal to the levels that maximize 
                             % the payoff function (minimize -1*payoff)
-            Vtemp(j)        = -Vtmp;
-            invtemp(j)      = Invtmp;
+            Viter(j)        = -Vtmp;
+            ESCiter(j)      = ESCtmp;
             
         end
-        V(i)        = pz*Vtemp;   
+        V(i)        = pz*Viter;   
                             % make current value function the starting 
                             % point for the next iteration
-        invstar(i)  = pz*invtemp;
+        ESCstar(i)  = pz*ESCiter;
     end
     
     dev         = abs((V - Vold)./V)*100;   % calculate the maximum 
@@ -103,7 +113,7 @@ while check > .01           % keep going until max dev less than .01%
     
     colorvec    = [0.1 ,0.5 ,1 ; 1, 0, 0];  % creates colormap for plot
     
-    if check > 0.01                         % so long as the loop will do 
+    if check > conv                         % so long as the loop will do 
                                             % another iteration, plot using
                                             % the first color of the
                                             % colormap
@@ -117,13 +127,13 @@ while check > .01           % keep going until max dev less than .01%
         subplot(1,2,1)
         plot(Svec,Vold,'Color',color)
         xlabel('stock')
-        ylabel('Value Function value')
+        ylabel('Value Function')
         hold on
 
         subplot(1,2,2)
-        plot(Svec,invstar,'Color',color)
+        plot(Svec,ESCstar,'Color',color)
         xlabel('stock')
-        ylabel('optimal investment')
+        ylabel('optimal escapement (%)')
         hold on
         pause(.1)
         
