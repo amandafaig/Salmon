@@ -1,7 +1,11 @@
 Salmon
 ======
 
-salmon_VFI.m 			script that runs a VFI to solve the problem
-salmon_ADP.m			script that runs the most simple ADP possible to solve the problem
-
-negpayoff.m			function that feeds into scripts to give the value of any given choice
+All of the below solve the simple fishery problem, where harvest is the control 
+variable and fish population is the stock.  There is a shock to fish population 
+each period.
+-------------------------------------------------------------------------------------------------------
+salmon_preVFI.m 		-- pre-decision state VFI
+salmon_postVFI.m		-- post-decision state VFI
+salmon_ADP1.m		-- ADP no regression
+salmon_ADP2.m 		-- ADP with regression

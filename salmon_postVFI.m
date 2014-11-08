@@ -15,98 +15,88 @@
 %                           (from investment to fish) specification.
 % ------------------------------------------------------------------------
 % Created: Nov 4, 2014
-% Last updated: Nov 6, 2014
+% Last updated: Nov 8, 2014
 % Amanda Faig
 % ------------------------------------------------------------------------
 
 clear all
 %dbstop in negpayoff
 
-% 1A. Set up the economic parameters
-% ----------------------------------
+% 1A. Specify the economic parameters
+% -----------------------------------
 p       = 10;           % price per kg
 c       = 0.075;        % cost of harvest
 delta   = 1/1.03;       % discount factor
                         
 
-% 1B. Set up the biological parameters
-% ------------------------------------
+% 1B. Specify the biological parameters
+% -------------------------------------
 R       = 201;          
 alpha   = 2;          
-K       = round((R-1)/alpha);          % carrying capacity
+K       = round((R-1)/alpha);   % carrying capacity
 
-% 1C. Set up stochasticity
-% ------------------------
-mean        = 0;                    % mean for distribution of shocks
-sd          = .1;                    % SD for distribution of shocks 
-z           = linspace(mean - 3*sd,mean + 3*sd, 10); 
-                                % 100 points from 99.7% of the distribution
-cz          = normcdf(z,mean,sd);
-cz2         = [0, cz];
-cz2(end)    = [];
-pz          = (cz - cz2);
-pz(end)     = 0;
-pz(end)     = 1 - sum(pz);
+% 1C. Specify stochastic space
+% ----------------------------
+numz        = 10;       % number of possible shock value
+mean        = 0;        % mean for distribution of shocks
+sd          = .1;       % SD for distribution of shocks 
+Zvec        = linspace(mean - 3*sd,mean + 3*sd, numz); 
+                        % 100 points from 99.7% of the distribution
+zbin        = Zvec - abs(Zvec(1)-Zvec(2))/2; 
+                        % discretize normal pdf into bins 
+zbin(numz+1)= Zvec(numz) + abs(Zvec(1)-Zvec(2))/2;
+cdfz        = normcdf(zbin,mean,sd);
+cdfz2       = [0, cdfz];
+cdfz        = [cdfz, 1];
+pz          = (cdfz - cdfz2);
+pz          = reshape(pz,length(pz),1);
 
-        % check that the probabilities add up to 1
-        % ----------------------------------------
-        if sum(pz) ~= 1               
+% 1D. Specify state space and action space
+% ----------------------------------------
+Svec                    = linspace(0,K,K+1);        % possible states     
+Avec                    = linspace(0,1,50);         % possible actions
+[S_sza, Z_sza, A_sza]   = meshgrid(Svec,Zvec,Avec); % possible combinations
 
-            disp('ERROR: improper probability matrix')
-            break
-        end
 
-% 1D. Set up all other parameters
-% -------------------------------
-Svec    = linspace(0,K,K+1);      % vector of the state space
+% 1E. Specify solution method parameters
+% --------------------------------------
 check   = 2;
 conv    = 0.01;         % convergence check: how close in percent the 
                         % estimates from two successive iterations must be 
                         % in order for the loop to stop
-
+                        
 % 2. Initial condition
 % --------------------
-Vold    = linspace(10^4,10^4+K,K+1);  % sets initial guess of value 
+Vold    = linspace(10^4,10^4+K,K+1);    % sets initial guess of value 
                                         % function for each stock leven in 
                                         % each period
 Vold(1) = 0;                            % the value of no stock is 0
 
-% Placeholders
-% ------------
-Viter   = zeros(length(z),1);
-V       = zeros(1,length(Svec));
-ESCiter = Viter;
-ESCstar = V;
-
-
 % 3. Value Function Iteration
 % ---------------------------
 
+% Today's Profit and Next Period's Stock for every (S,Z,A) combo
+% --------------------------------------------------------------
+pi_sza      = p.*(S_sza-A_sza.*S_sza) - c.*(S_sza-A_sza.*S_sza).^2;
+                    % profit function
+SN_sza      = (1.+Z_sza).*(R.*A_sza.*S_sza./(1.+alpha.*A_sza.*S_sza));
+                    % stock 
+
+
+% Placeholders
+% ------------
+
+
 while check > conv          % keep going until max dev less than .01%
-    for i = 1:length(Svec)  % loop over stocks
-        for j = 1:length(z)
-            e               = z(j);
-            S               = Svec(i);
-            [ESCtmp, Vtmp]  = ...
-            fminbnd(@(esc)negpayoff(esc,p,c,delta,R,alpha,Svec,S,Vold,e,1),0,1);
-                            % temporary investment decision and value 
-                            % function is equal to the levels that maximize 
-                            % the payoff function (minimize -1*payoff)
-            Viter(j)        = -Vtmp;
-            ESCiter(j)      = ESCtmp;
-            
-        end
-        V(i)        = pz*Viter;   
-                            % make current value function the starting 
-                            % point for the next iteration
-        ESCstar(i)  = pz*ESCiter;
-    end
     
-    dev         = abs((V - Vold)./V)*100;   % calculate the maximum 
-                                            % deviation (in percent) 
-                                            % between iterations
-    check       = max(dev);                 
-    Vold        = V;
+      Vn_sza            = interp1(Svec,V,SN_sza,'spline');  
+                            % Hypothetical value function next period for each (S,Z,A)
+      V_sza             = pi_sza + delta*Vn_sza;            
+                            % Value function today for each (S,Z,A)
+      [V_sz, Ai_sz]     = max(V_sza,[],3);
+                            % Value function 
+                            
+ 
     
     % Plot the value function and policy function of each iteration
     % -------------------------------------------------------------

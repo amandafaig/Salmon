@@ -15,56 +15,59 @@
 %                       (from investment to fish) specification.
 % ------------------------------------------------------------------------
 % Created: September 30, 2014
-% Last Updated: Nov 6, 2014
+% Last Updated: Nov 8, 2014
 % Amanda Faig
 % ------------------------------------------------------------------------
 
 clear all
 %dbstop in negpayoff
 
-% 1A. Set up the economic parameters
-% ----------------------------------
-p       = 10;            % price per kg
+% 1A. Specify the economic parameters
+% -----------------------------------
+p       = 10;           % price per kg
 c       = 0.075;        % cost of harvest
 delta   = 1/1.03;       % discount factor
 
 
-% 1B. Set up the biological parameters
-% ------------------------------------
+% 1B. Specify the biological parameters
+% -------------------------------------
 R       = 201;          
 alpha   = 2;          
-K       = round((R-1)/alpha);          % carrying capacity
+K       = round((R-1)/alpha);       % carrying capacity
 
-% 1C. Set up stochasticity
-% ------------------------
+% 1C. Specify stochastic space
+% ----------------------------
+numz        = 10;                   % number of possible shock value
 mean        = 0;                    % mean for distribution of shocks
-sd          = .1;                    % SD for distribution of shocks 
-z           = linspace(mean - 3*sd,mean + 3*sd, 100); 
-                                % 100 points from 99.7% of the distribution
-cz          = normcdf(z,mean,sd);
-cz2         = [0, cz];
-cz2(end)    = [];
-pz          = (cz - cz2);
-pz(end)     = 0;
-pz(end)     = 1 - sum(pz);
+sd          = .1;                   % SD for distribution of shocks 
+z           = linspace(mean - 3*sd,mean + 3*sd, numz); 
+                                    % 100 points from 99.7% of the 
+                                    % distribution
+zbin        = z - abs(z(1)-z(2))/2; % discretize normal pdf into bins 
+                                    % around shock values
+zbin(numz+1)= z(numz) + abs(z(1)-z(2))/2;
+cdfz        = normcdf(zbin,mean,sd);
+cdfz2       = [0, cdfz];
+cdfz        = [cdfz, 1];
+pz          = (cdfz - cdfz2);
 
 
-        % check that the probability vector makes sense
-        % ---------------------------------------------
-        if sum(pz) ~= 1               
+% 1D. Specify state space
+% -----------------------
+Svec    = linspace(0,K,K+1);      
 
-            disp('ERROR: improper probability matrix')
-            break
-        end
-
-% 1D. Set up all other parameters
-% -------------------------------
-Svec    = linspace(0,K,K+1);      % vector of the state space
+% 1E. Specify solution method parameters
+% --------------------------------------
 check   = 2;
 conv    = 0.01;         % convergence check: how close in percent the 
                         % estimates from two successive iterations must be 
                         % in order for the loop to stop
-
+% 2. Initial condition
+% --------------------
+Vold    = linspace(10^4,10^4+K,K+1);  % sets initial guess of value 
+                                        % function for each stock leven in 
+                                        % each period
+Vold(1) = 0;                            % the value of no stock is 0
 
 % 2. Initial condition
 % --------------------
@@ -73,13 +76,13 @@ Vold    = linspace(10^4,10^4+K,K+1);  % sets initial guess of value
                                         % each period
 Vold(1) = 0;                            % the value of no stock is 0
                                                
+% 3. Value Function Iteration
+% ---------------------------
+
 % Placeholders
 % ------------
 V       = zeros(1,length(Svec));
 ESCstar = V;
-
-% 3. Value Function Iteration
-% ---------------------------
 
 while check > conv          % keep going until max dev less than .01%
     for i = 1:length(Svec)  % loop over stocks
@@ -105,7 +108,7 @@ while check > conv          % keep going until max dev less than .01%
     % Plot the value function and policy function of each iteration
     % -------------------------------------------------------------
     
-    colorvec    = [0.2 ,0.5 ,1 ; 1, 0.2, 0];  % creates colormap for plot
+    colorvec    = [0.5 ,1 ,0.8 ; 1, 0, 1];  % creates colormap for plot
     
     if check > conv                         % so long as the loop will do 
                                             % another iteration, plot using
