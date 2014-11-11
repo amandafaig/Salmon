@@ -20,7 +20,7 @@
 % ------------------------------------------------------------------------
 
 clear all
-%dbstop in negpayoff
+
 
 % 1A. Specify the economic parameters
 % -----------------------------------
@@ -40,7 +40,7 @@ K       = round((R-1)/alpha);   % carrying capacity
 numz        = 10;       % number of possible shock value
 mean        = 0;        % mean for distribution of shocks
 sd          = .1;       % SD for distribution of shocks 
-Zvec        = linspace(mean - 3*sd,mean + 3*sd, numz); 
+Zvec        = linspace(mean - sd,mean + sd, numz); 
                         % 100 points from 99.7% of the distribution
 zbin        = Zvec - abs(Zvec(1)-Zvec(2))/2; 
                         % discretize normal pdf into bins 
@@ -49,13 +49,14 @@ cdfz        = normcdf(zbin,mean,sd);
 cdfz2       = [0, cdfz];
 cdfz        = [cdfz, 1];
 pz          = (cdfz - cdfz2);
-pz          = reshape(pz,length(pz),1);
+pz          = pz(2:numz+1);
+pz          = pz./sum(pz);
 
 % 1D. Specify state space and action space
 % ----------------------------------------
 Svec                    = linspace(0,K,K+1);        % possible states     
-Avec                    = linspace(0,1,50);         % possible actions
-[S_sza, Z_sza, A_sza]   = meshgrid(Svec,Zvec,Avec); % possible combinations
+Avec                    = linspace(0,1,100);         % possible actions
+[S_zsa, Z_zsa, A_zsa]   = meshgrid(Svec,Zvec,Avec); % possible combinations
 
 
 % 1E. Specify solution method parameters
@@ -67,61 +68,66 @@ conv    = 0.01;         % convergence check: how close in percent the
                         
 % 2. Initial condition
 % --------------------
-Vold    = linspace(10^4,10^4+K,K+1);    % sets initial guess of value 
+V    = linspace(10^4,10^4,K+1);    % sets initial guess of value 
                                         % function for each stock leven in 
                                         % each period
-Vold(1) = 0;                            % the value of no stock is 0
+V(1) = 0;                            % the value of no stock is 0
 
 % 3. Value Function Iteration
 % ---------------------------
 
 % Today's Profit and Next Period's Stock for every (S,Z,A) combo
 % --------------------------------------------------------------
-pi_sza      = p.*(S_sza-A_sza.*S_sza) - c.*(S_sza-A_sza.*S_sza).^2;
+pi_zsa      = p.*(S_zsa-A_zsa.*S_zsa) - c.*(S_zsa-A_zsa.*S_zsa).^2;
                     % profit function
-SN_sza      = (1.+Z_sza).*(R.*A_sza.*S_sza./(1.+alpha.*A_sza.*S_sza));
+SN_zsa      = (1.+Z_zsa).*(R.*A_zsa.*S_zsa./(1.+alpha.*A_zsa.*S_zsa));
                     % stock 
 
-
-% Placeholders
-% ------------
 
 
 while check > conv          % keep going until max dev less than .01%
     
-      Vn_sza            = interp1(Svec,V,SN_sza,'spline');  
-                            % Hypothetical value function next period for each (S,Z,A)
-      V_sza             = pi_sza + delta*Vn_sza;            
+        Vn_zsa          = interp1(Svec,V,SN_zsa,'spline');  
+                            % Hypothetical value function next period for 
+                            % each (S,Z,A)
+        V_zsa           = pi_zsa + delta*Vn_zsa;            
                             % Value function today for each (S,Z,A)
-      [V_sz, Ai_sz]     = max(V_sza,[],3);
+        [V_zs, Ai_zs]   = max(V_zsa,[],3);
                             % Value function 
-                            
+        Vnew            = pz*V_zs;                      
  
+        dev             = abs((Vnew - V)./V)*100;   % calculate the maximum 
+                                                    % deviation (in percent) 
+                                                    % between iterations
+        check           = max(dev);                 
+        V               = Vnew;
+        A_zs            = Avec(Ai_zs);     
+        A               = pz*A_zs;
     
     % Plot the value function and policy function of each iteration
     % -------------------------------------------------------------
     
-    colorvec    = [0.1 ,0.5 ,1 ; 1, 0, 0];  % creates colormap for plot
+        colorvec    = [0.1 ,0.5 ,1 ; 1, 0, 0];  % creates colormap for plot
     
-    if check > conv                         % so long as the loop will do 
+        if check > conv                         % so long as the loop will do 
                                             % another iteration, plot using
                                             % the first color of the
                                             % colormap
-        color = colorvec(1,:);
+            color = colorvec(1,:);
         
-    else
-        color = colorvec(2,:);              % otherwise, plot with second 
+        else
+            color = colorvec(2,:);              % otherwise, plot with second 
                                             % color
-    end
+        end
          
         subplot(1,2,1)
-        plot(Svec,Vold,'Color',color)
+        plot(Svec,V,'Color',color)
         xlabel('stock')
         ylabel('Value Function')
         hold on
 
         subplot(1,2,2)
-        plot(Svec,ESCstar,'Color',color)
+        plot(Svec,A,'Color',color)
         xlabel('stock')
         ylabel('optimal escapement (%)')
         hold on

@@ -20,7 +20,7 @@
 % ------------------------------------------------------------------------
 
 clear all
-%dbstop in negpayoff
+
 
 % 1A. Specify the economic parameters
 % -----------------------------------
@@ -37,24 +37,27 @@ K       = round((R-1)/alpha);       % carrying capacity
 
 % 1C. Specify stochastic space
 % ----------------------------
-numz        = 10;                   % number of possible shock value
-mean        = 0;                    % mean for distribution of shocks
-sd          = .1;                   % SD for distribution of shocks 
-z           = linspace(mean - 3*sd,mean + 3*sd, numz); 
-                                    % 100 points from 99.7% of the 
-                                    % distribution
-zbin        = z - abs(z(1)-z(2))/2; % discretize normal pdf into bins 
-                                    % around shock values
-zbin(numz+1)= z(numz) + abs(z(1)-z(2))/2;
+numz        = 10;       % number of possible shock value
+mean        = 0;        % mean for distribution of shocks
+sd          = .1;       % SD for distribution of shocks 
+Zvec        = linspace(mean - sd,mean + sd, numz); 
+                        % 100 points from 99.7% of the distribution
+zbin        = Zvec - abs(Zvec(1)-Zvec(2))/2; 
+                        % discretize normal pdf into bins 
+zbin(numz+1)= Zvec(numz) + abs(Zvec(1)-Zvec(2))/2;
 cdfz        = normcdf(zbin,mean,sd);
 cdfz2       = [0, cdfz];
 cdfz        = [cdfz, 1];
 pz          = (cdfz - cdfz2);
+pz          = pz(2:numz+1);
+pz          = pz./sum(pz);
 
-
-% 1D. Specify state space
-% -----------------------
-Svec    = linspace(0,K,K+1);      
+% 1D. Specify state space and action space
+% ----------------------------------------
+Svec                    = linspace(0,K,K+1);        % possible states     
+Avec                    = linspace(0,1,100);         % possible actions
+[S_zsa, Z_zsa, A_zsa]   = meshgrid(Svec,Zvec,Avec); % possible combinations
+[A_sa, S_sa]            = meshgrid(Avec,Svec);
 
 % 1E. Specify solution method parameters
 % --------------------------------------
@@ -64,46 +67,48 @@ conv    = 0.01;         % convergence check: how close in percent the
                         % in order for the loop to stop
 % 2. Initial condition
 % --------------------
-Vold    = linspace(10^4,10^4+K,K+1);  % sets initial guess of value 
+V    = linspace(10^4,10^4+K,K+1);    % sets initial guess of value 
                                         % function for each stock leven in 
                                         % each period
-Vold(1) = 0;                            % the value of no stock is 0
+V    = reshape(V,[101 1]);
+V(1) = 0;                            % the value of no stock is 0
 
-% 2. Initial condition
-% --------------------
-Vold    = linspace(10^4,10^4+K,K+1);  % sets initial guess of value 
-                                        % function for each stock leven in 
-                                        % each period
-Vold(1) = 0;                            % the value of no stock is 0
-                                               
 % 3. Value Function Iteration
 % ---------------------------
 
-% Placeholders
-% ------------
-V       = zeros(1,length(Svec));
-ESCstar = V;
+% Today's Profit and Next Period's Stock for every (S,Z,A) combo
+% --------------------------------------------------------------
+pi_sa      = p.*(S_sa-A_sa.*S_sa) - c.*(S_sa-A_sa.*S_sa).^2;
+                    % profit function
+SN_zsa      = (1.+Z_zsa).*(R.*A_zsa.*S_zsa./(1.+alpha.*A_zsa.*S_zsa));
+                    % stock 
+
+
 
 while check > conv          % keep going until max dev less than .01%
-    for i = 1:length(Svec)  % loop over stocks
-        S               = Svec(i);
-        [ESCtmp, Vtmp]  = ...
-            fminbnd(@(esc)negpayoff(esc,p,c,delta,R,alpha,Svec,S,Vold,z,pz),0,1);
-                            % temporary investment decision and value 
-                            % function is equal to the levels that maximize 
-                            % the payoff function (minimize -1*payoff)
-        ESCstar(i)      = ESCtmp;   
-                            % investment decisions for each level of stock
-        V(i)            = -Vtmp;   
-                            % make current value function the starting 
-                            % point for the next iteration
-    end
     
-    dev         = abs((V - Vold)./V)*100;   % calculate the maximum 
-                                            % deviation (in percent) 
-                                            % between iterations
-    check       = max(dev);                 
-    Vold        = V;
+        Vn_zsa          = interp1(Svec,V,SN_zsa,'spline');  
+                            % Hypothetical value function next period for 
+                            % each (S,Z,A)                        
+        EV_sa           = 0*S_sa;  
+                            % empty out Expected Value array
+        for i = 1:numz
+            EV_sa       = EV_sa + pz(i)*squeeze(Vn_zsa(i,:,:));
+                            % weighted sum of value functions, weighted by
+                            % probability.
+        end
+        
+        V_sa            = pi_sa + delta*EV_sa;            
+                            % Value function today for each (S,Z,A)
+        [Vnew, Ai]      = max(V_sa,[],2);
+                            % Value function                     
+        dev             = abs((Vnew - V)./V)*100;   % calculate the maximum 
+                                                    % deviation (in percent) 
+                                                    % between iterations
+        check           = max(dev);                 
+        V               = Vnew;
+        A               = Avec(Ai);     
+
     
     % Plot the value function and policy function of each iteration
     % -------------------------------------------------------------
@@ -122,18 +127,17 @@ while check > conv          % keep going until max dev less than .01%
     end
          
         subplot(1,2,1)
-        plot(Svec,Vold,'Color',color)
+        plot(Svec,V,'Color',color)
         xlabel('stock')
         ylabel('Value Function')
         hold on
 
         subplot(1,2,2)
-        plot(Svec,ESCstar,'Color',color)
+        plot(Svec,A,'Color',color)
         xlabel('stock')
-        ylabel('optimal escapement (fraction)')
+        ylabel('optimal escapement (%)')
         hold on
         pause(.1)
-        
 end
 
       
