@@ -28,17 +28,24 @@ p       = 10;           % price per kg
 c       = 0.075;        % cost of harvest
 delta   = 1/1.03;       % discount factor
                         
+% Specify the profit function
+% ---------------------------
+pi      = @(S,Fz,A) p.*(Fz.*S.*(1-A)) - c.*(Fz.*S.*(1-A)).^2;
 
 % 1B. Specify the biological parameters
 % -------------------------------------
 R       = 201;          
-alpha   = 2;          
-K       = round((R-1)/alpha);   % carrying capacity
+K       = 100;      
+alpha   = (R-1)/K;   
 
+% Specify the stock transition function
+% -------------------------------------
+SN      = @(S,Fz,A) (R.*A.*Fz.*S)./(1+alpha*A.*Fz.*S);
+ 
 % 1C. Specify stochastic space
 % ----------------------------
 numz        = 10;       % number of possible shock value
-mean        = 0;        % mean for distribution of shocks
+mean        = 1;        % mean for distribution of shocks
 sd          = .1;       % SD for distribution of shocks 
 Zvec        = linspace(mean - sd,mean + sd, numz); 
                         % 100 points from 99.7% of the distribution
@@ -51,20 +58,21 @@ cdfz        = [cdfz, 1];
 pz          = (cdfz - cdfz2);
 pz          = pz(2:numz+1);
 pz          = pz./sum(pz);
+pz          = reshape(pz,length(pz),1);
 
 % 1D. Specify state space and action space
 % ----------------------------------------
 Svec                    = linspace(0,K,K+1);        % possible states     
-Avec                    = linspace(0,1,100);         % possible actions
-[S_zsa, Z_zsa, A_zsa]   = meshgrid(Svec,Zvec,Avec); % possible combinations
+Avec                    = linspace(0,1,100);        % possible actions
+[S_sza, Z_sza, A_sza]   = ndgrid(Svec,Zvec,Avec);   % possible combinations
 
 
 % 1E. Specify solution method parameters
 % --------------------------------------
-check   = 2;
 conv    = 0.01;         % convergence check: how close in percent the 
                         % estimates from two successive iterations must be 
                         % in order for the loop to stop
+check   = 2*conv;       % ensure that the loop will start
                         
 % 2. Initial condition
 % --------------------
@@ -72,37 +80,34 @@ V    = linspace(10^4,10^4,K+1);    % sets initial guess of value
                                         % function for each stock leven in 
                                         % each period
 V(1) = 0;                            % the value of no stock is 0
+V    = reshape(V,length(V),1);
 
 % 3. Value Function Iteration
 % ---------------------------
 
 % Today's Profit and Next Period's Stock for every (S,Z,A) combo
 % --------------------------------------------------------------
-pi_zsa      = p.*(S_zsa-A_zsa.*S_zsa) - c.*(S_zsa-A_zsa.*S_zsa).^2;
-                    % profit function
-SN_zsa      = (1.+Z_zsa).*(R.*A_zsa.*S_zsa./(1.+alpha.*A_zsa.*S_zsa));
-                    % stock 
-
-
+pi_sza      = pi(S_sza,Z_sza,A_sza);   % profit for every s_t, z_t-1, a_t               
+SN_sza      = SN(S_sza,Z_sza,A_sza);   % s_t+1 for every s_t, z_t-1, a_t
 
 while check > conv          % keep going until max dev less than .01%
     
-        Vn_zsa          = interp1(Svec,V,SN_zsa,'spline');  
+        Vn_sza          = interp1(Svec,V,SN_sza,'spline');  
                             % Hypothetical value function next period for 
                             % each (S,Z,A)
-        V_zsa           = pi_zsa + delta*Vn_zsa;            
+        V_sza           = pi_sza + delta*Vn_sza;            
                             % Value function today for each (S,Z,A)
-        [V_zs, Ai_zs]   = max(V_zsa,[],3);
+        [V_sz, Ai_sz]   = max(V_sza,[],3);
                             % Value function 
-        Vnew            = pz*V_zs;                      
+        Vnew            = V_sz*pz;                      
  
         dev             = abs((Vnew - V)./V)*100;   % calculate the maximum 
                                                     % deviation (in percent) 
                                                     % between iterations
         check           = max(dev);                 
         V               = Vnew;
-        A_zs            = Avec(Ai_zs);     
-        A               = pz*A_zs;
+        A_sz            = Avec(Ai_sz);     
+        A               = A_sz*pz;
     
     % Plot the value function and policy function of each iteration
     % -------------------------------------------------------------

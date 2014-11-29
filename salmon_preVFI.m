@@ -28,17 +28,24 @@ p       = 10;           % price per kg
 c       = 0.075;        % cost of harvest
 delta   = 1/1.03;       % discount factor
 
+% Specify the profit function
+% ---------------------------
+pi      = @(S,Fz,A) p.*(Fz.*S.*(1-A)) - c.*(Fz.*S.*(1-A)).^2;
 
 % 1B. Specify the biological parameters
 % -------------------------------------
 R       = 201;          
-alpha   = 2;          
-K       = round((R-1)/alpha);       % carrying capacity
+K       = 100;      
+alpha   = (R-1)/K;   
+
+% Specify the stock transition function
+% -------------------------------------
+SN      = @(S,Fz,A) (R.*A.*Fz.*S)./(1+alpha*A.*Fz.*S);
 
 % 1C. Specify stochastic space
 % ----------------------------
 numz        = 10;       % number of possible shock value
-mean        = 0;        % mean for distribution of shocks
+mean        = 1;        % mean for distribution of shocks
 sd          = .1;       % SD for distribution of shocks 
 Zvec        = linspace(mean - sd,mean + sd, numz); 
                         % 100 points from 99.7% of the distribution
@@ -56,8 +63,7 @@ pz          = pz./sum(pz);
 % ----------------------------------------
 Svec                    = linspace(0,K,K+1);        % possible states     
 Avec                    = linspace(0,1,100);         % possible actions
-[S_zsa, Z_zsa, A_zsa]   = meshgrid(Svec,Zvec,Avec); % possible combinations
-[A_sa, S_sa]            = meshgrid(Avec,Svec);
+[S_sza, Z_sza, A_sza]   = ndgrid(Svec,Zvec,Avec);   % possible combinations
 
 % 1E. Specify solution method parameters
 % --------------------------------------
@@ -78,27 +84,27 @@ V(1) = 0;                            % the value of no stock is 0
 
 % Today's Profit and Next Period's Stock for every (S,Z,A) combo
 % --------------------------------------------------------------
-pi_sa      = p.*(S_sa-A_sa.*S_sa) - c.*(S_sa-A_sa.*S_sa).^2;
-                    % profit function
-SN_zsa      = (1.+Z_zsa).*(R.*A_zsa.*S_zsa./(1.+alpha.*A_zsa.*S_zsa));
-                    % stock 
-
+pi_sza      = pi(S_sza,Z_sza,A_sza);   % profit for every s_t, z_t-1, a_t               
+SN_sza      = SN(S_sza,Z_sza,A_sza);   % s_t+1 for every s_t, z_t-1, a_t
 
 
 while check > conv          % keep going until max dev less than .01%
     
-        Vn_zsa          = interp1(Svec,V,SN_zsa,'spline');  
+        Vn_sza          = interp1(Svec,V,SN_sza,'spline');  
                             % Hypothetical value function next period for 
                             % each (S,Z,A)                        
-        EV_sa           = 0*S_sa;  
-                            % empty out Expected Value array
+        EV_sa           = zeros(length(Svec),length(Avec));   
+                            % empty out expected value array
+        EP_sa           = zeros(length(Svec),length(Avec));    
+                            % empty out expected profit array
         for i = 1:numz
-            EV_sa       = EV_sa + pz(i)*squeeze(Vn_zsa(i,:,:));
+            EV_sa       = EV_sa + pz(i)*squeeze(Vn_sza(:,i,:));
                             % weighted sum of value functions, weighted by
                             % probability.
+            EP_sa       = EP_sa + pz(i)*squeeze(pi_sza(:,i,:));
         end
         
-        V_sa            = pi_sa + delta*EV_sa;            
+        V_sa            = EP_sa + delta*EV_sa;            
                             % Value function today for each (S,Z,A)
         [Vnew, Ai]      = max(V_sa,[],2);
                             % Value function                     
